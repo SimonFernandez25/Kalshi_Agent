@@ -1,0 +1,86 @@
+# Prediction Agent Repository Manifest
+
+ This document provides a detailed overview of every file in the repository to assist with maintenance and cleanup.
+
+## 📂 Root Directory (`prediction_agent/`)
+
+| File | Status | Description |
+| :--- | :--- | :--- |
+| **`config.py`** | **KEEP** | **Configuration.** Central source of truth for constants, file paths (`OUTPUTS_DIR`, `API_KEY_FILE`), and API settings (`KALSHI_BASE_URL`). |
+| **`main.py`** | **KEEP** | **Orchestrator.** The entry point for the "V1" agent pipeline. It ties together the API, Agent, Engine, and Watcher into a single execution flow. |
+| **`collector.py`** | **KEEP** | **Data Collection.** A robust, crash-safe script that continuously fetches active markets from Kalshi and appends them to `outputs/market_snapshots.jsonl`. |
+| **`schemas.py`** | **KEEP** | **Data Models.** Contains all Pydantic models (`EventInput`, `FormulaSpec`, `ToolOutput`, `PaperBet`) that enforce strict typing across the system. |
+| **`requirements.txt`** | **KEEP** | **Dependencies.** Lists Python packages required to run the agent (e.g., `cryptography`, `pydantic`, `langgraph`). |
+| **`README.md`** | **KEEP** | **Documentation.** High-level project overview. |
+| **`FebuaruyAPIKalshi.txt`** | **KEEP** | **Credentials.** Contains the RSA Private Key used for Kalshi V2 authentication. **(Sensitive)** |
+
+### Notebooks (Candidates for Cleanup)
+| File | Status | Description |
+| :--- | :--- | :--- |
+| **`explore_snapshots.ipynb`** | **KEEP** | **Analysis.** Notebook for loading `market_snapshots.jsonl` and visualizing market data (price distributions, liquidity, etc.). |
+| **`populate_dataset.ipynb`** | **DELETE** | **Temporary Utility.** Interactive notebook created to manually populate the initial dataset when the script failed. content usage is complete. |
+| **`visualize_single_run.ipynb`** | **KEEP** | **Visualization.** Notebook designed to visualize the inputs, weights, and score of a single agent run (from `paper_bets.jsonl`). |
+| **`visualize_single_run_executed.ipynb`** | **DELETE** | **Artifact.** A rendered version of the visualization notebook. Can be regenerated. |
+
+---
+
+## 📂 `api/` (External Integrations)
+
+| File | Status | Description |
+| :--- | :--- | :--- |
+| **`kalshi_client.py`** | **KEEP** | **Kalshi RPC Client.** Handles all interactions with the Kalshi API. Implements V2 RSA request signing, pagination, and data normalization. |
+| **`__init__.py`** | **KEEP** | Package initialization. |
+
+---
+
+## 📂 `agent/` (Decision Logic)
+
+| File | Status | Description |
+| :--- | :--- | :--- |
+| **`graph.py`** | **KEEP** | **LangGraph Definition.** Defines the agent's workflow graph (nodes and edges). Currently a linear flow: `select_tools` -> `validate_spec`. |
+| **`nodes.py`** | **KEEP** | **Graph Nodes.** Implements the logic for each graph node. `select_tools_node` constructs the specific prompt and calls the LLM. |
+| **`prompts.py`** | **KEEP** | **Prompt Engineering.** Stores the `SYSTEM_PROMPT` and `USER_PROMPT_TEMPLATE` used to instruct the LLM on how to select tools and assign weights. |
+| **`__init__.py`** | **KEEP** | Package initialization. |
+
+---
+
+## 📂 `engine/` (Deterministic Execution)
+
+| File | Status | Description |
+| :--- | :--- | :--- |
+| **`tool_runner.py`** | **KEEP** | **Execution Engine.** Takes the agent's `FormulaSpec`, looks up tools in the registry, and executes them in order. |
+| **`scorer.py`** | **KEEP** | **Scoring Logic.** Computes the final `weighted_sum` score from the raw tool outputs and agent weights. Purely arithmetic. |
+| **`watcher.py`** | **KEEP** | **Market Watcher.** A loop that polls the live market price at fixed intervals to check if the agent's threshold is triggered. |
+| **`paper_broker.py`** | **KEEP** | **Logging/Broker.** "Paper trades" the result. It logs the full run details to `paper_bets.jsonl` for later analysis. |
+| **`__init__.py`** | **KEEP** | Package initialization. |
+
+---
+
+## 📂 `tools/` (Signals & Features)
+
+| File | Status | Description |
+| :--- | :--- | :--- |
+| **`base_tool.py`** | **KEEP** | **Interface.** Abstract Base Class (ABC) defining the structure (`run`, `name`) that all tools must implement. |
+| **`registry.py`** | **KEEP** | **Tool Registry.** A central dictionary of all available tools. The agent (LLM) is only made aware of tools registered here. |
+| **`mock_tools.py`** | **KEEP** | **Testing Tools.** Simple deterministic tools (`mock_price_signal`, `mock_random_context`) used to verify the pipeline plumbing without real data. |
+| **`snapshot_volatility_tool.py`** | **KEEP** | **Real Tool.** A production-ready tool that computes volatility, spread, and liquidity metrics from the local `market_snapshots.jsonl` dataset. |
+| **`__init__.py`** | **KEEP** | Package initialization. |
+
+---
+
+## 📂 `scripts/` (Utilities)
+
+| File | Status | Description |
+| :--- | :--- | :--- |
+| **`test_auth.py`** | **KEEP** | **Verify Auth.** A simple script to print active market counts. Useful for quickly checking if API keys are working. |
+
+---
+
+## 📂 `outputs/` (Data & Logs)
+
+| File | Status | Description |
+| :--- | :--- | :--- |
+| **`market_snapshots.jsonl`** | **KEEP** | **Dataset.** The core dataset of real market snapshots collected by `collector.py`. |
+| **`paper_bets.jsonl`** | **KEEP** | **Logs.** Detailed JSONL logs of every "paper bet" decision made by the agent. |
+| **`run_log.jsonl`** | **KEEP** | **Logs.** An abbreviated log useful for quick scanning of run results. |
+| **`price_vs_time.png`** | **DELETE** | **Temporary.** A plot image generated during exploration. |

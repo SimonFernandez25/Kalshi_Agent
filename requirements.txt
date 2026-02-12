@@ -1,0 +1,21 @@
+# Prediction Agent Framework — Dependencies
+# Install: pip install -r requirements.txt
+
+# Core
+pydantic>=2.0,<3.0
+requests>=2.31,<3.0
+
+# LangGraph agent
+langgraph>=0.2,<1.0
+langchain-core>=0.3,<1.0
+
+# LLM client
+anthropic>=0.40,<1.0
+
+# Notebook visualization
+jupyter>=1.0
+matplotlib>=3.7
+pandas>=2.0
+cryptography>=41.0
+langchain-aws>=0.1
+boto3>=1.34
