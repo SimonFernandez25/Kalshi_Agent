@@ -28,7 +28,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
-from prediction_agent.config import (
+from config import (
     API_KEY_FILE,
     KALSHI_BASE_URL,
 )

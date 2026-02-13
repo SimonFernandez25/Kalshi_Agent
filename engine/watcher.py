@@ -12,9 +12,9 @@ import time
 from datetime import datetime, timezone
 from typing import List
 
-from prediction_agent.api.kalshi_client import KalshiClient
-from prediction_agent.config import WATCHER_POLL_INTERVAL_SEC, WATCHER_TIMEOUT_SEC
-from prediction_agent.schemas import WatcherTick
+from api.kalshi_client import KalshiClient
+from config import WATCHER_POLL_INTERVAL_SEC, WATCHER_TIMEOUT_SEC
+from schemas import WatcherTick
 
 logger = logging.getLogger(__name__)
 

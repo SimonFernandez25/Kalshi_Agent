@@ -19,9 +19,9 @@ import statistics
 from pathlib import Path
 from typing import Any, Optional
 
-from prediction_agent.schemas import EventInput, ToolOutput
-from prediction_agent.tools.base_tool import BaseTool
-from prediction_agent.tools._snapshot_helpers import (
+from schemas import EventInput, ToolOutput
+from tools.base_tool import BaseTool
+from tools._snapshot_helpers import (
     DEFAULT_JSONL,
     extract_spreads,
     load_rows,

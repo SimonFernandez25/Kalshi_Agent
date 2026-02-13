@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from typing import List
 
-from prediction_agent.schemas import FormulaSpec, ScoreResult, ToolOutput
+from schemas import FormulaSpec, ScoreResult, ToolOutput
 
 logger = logging.getLogger(__name__)
 

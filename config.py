@@ -53,3 +53,22 @@ AVAILABLE_TOOLS = [
     "price_jump_detector_tool",
     "liquidity_spike_tool",
 ]
+
+# ──────────────────────────────────────────────
+# Evolution (Recursive Tool Growth)
+# ──────────────────────────────────────────────
+ENABLE_EVOLUTION = False                          # Master switch — off by default
+EVOLUTION_GAP_THRESHOLD = 0.5                     # Minimum priority_score to trigger proposal
+EVOLUTION_MAX_TOOLS_PER_CYCLE = 1                 # Cap new tools per evolution cycle
+EVOLUTION_DEPRECATION_RUNS = 10                   # Consecutive underperforming runs before deprecation
+EXECUTION_LOG_FILE = OUTPUTS_DIR / "execution_logs.jsonl"
+TOOL_LIFECYCLE_FILE = OUTPUTS_DIR / "tool_lifecycle.jsonl"
+GENERATED_TOOLS_DIR = PREDICTION_AGENT_DIR / "tools" / "generated"
+TOOL_VERIFY_TIMEOUT_SEC = 10
+TOOL_VERIFY_DETERMINISM_RUNS = 3
+
+# Evolution Oversight
+LIVE_MODE = True                                  # Enforce live API calls, warn on stale data
+FORCE_REFRESH_MARKETS = True                      # Skip Kalshi API cache
+EVOLUTION_REQUIRE_MANUAL_APPROVAL = True          # If True, tools go to pending/ and require manual promotion
+

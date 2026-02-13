@@ -1,0 +1,28 @@
+# Sensitive Info
+FebuaruyAPIKalshi.txt
+.env
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# Output Directories & Logs
+outputs/
+prediction_agent/outputs/
+*.log
+*.jsonl
+
+# Temporary Files
+test_tool.py
+test_imports.py
+
+# Generated Tools - Pending Approval
+tools/generated/pending/

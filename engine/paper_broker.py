@@ -13,8 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List
 
-from prediction_agent.config import DEFAULT_BET_AMOUNT, PAPER_BET_LOG, RUN_LOG
-from prediction_agent.schemas import (
+from config import DEFAULT_BET_AMOUNT, PAPER_BET_LOG, RUN_LOG
+from schemas import (
     EventInput,
     FormulaSpec,
     PaperBet,

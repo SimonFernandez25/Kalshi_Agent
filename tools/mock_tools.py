@@ -10,8 +10,8 @@ from __future__ import annotations
 import hashlib
 import random
 
-from prediction_agent.schemas import EventInput, ToolOutput
-from prediction_agent.tools.base_tool import BaseTool
+from schemas import EventInput, ToolOutput
+from tools.base_tool import BaseTool
 
 
 class MockPriceSignal(BaseTool):

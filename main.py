@@ -17,14 +17,15 @@ import logging
 import sys
 from datetime import datetime, timezone
 
-from prediction_agent.api.kalshi_client import KalshiClient
-from prediction_agent.agent.graph import build_agent_graph
-from prediction_agent.engine.tool_runner import run_tools
-from prediction_agent.engine.scorer import compute_score
-from prediction_agent.engine.watcher import watch_market
-from prediction_agent.engine.paper_broker import log_paper_bet
-from prediction_agent.schemas import EventInput, FormulaSpec
-from prediction_agent.tools.registry import build_default_registry
+from api.kalshi_client import KalshiClient
+from agent.graph import build_agent_graph
+from engine.tool_runner import run_tools
+from engine.scorer import compute_score
+from engine.watcher import watch_market
+from engine.paper_broker import log_paper_bet
+from schemas import EventInput, FormulaSpec
+from tools.registry import build_default_registry
+from config import ENABLE_EVOLUTION, EXECUTION_LOG_FILE
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,6 +33,34 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+
+def _print_run_summary(event, formula, score, registry, tool_statuses, mode="LIVE"):
+    """Print human-readable run summary to console."""
+    print("\n" + "="*60)
+    print(f"RUN SUMMARY [{mode} MODE]")
+    print("="*60)
+    print(f"\nMarket: {event.market_title}")
+    print(f"Price:  ${event.current_price:.2f}")
+    
+    print(f"\nTools Selected:")
+    for sel in formula.selections:
+        print(f"  - {sel.tool_name} (weight={sel.weight:.2f})")
+    
+    print(f"\nTool Execution:")
+    for status in tool_statuses:
+        status_icon = "✓" if status.success else "✗"
+        latency = f"{status.latency_ms:.1f}ms"
+        err = f" ERROR: {status.error}" if status.error else ""
+        print(f"  {status_icon} {status.tool_name:<25s} {latency:>8s}{err}")
+    
+    print(f"\nFinal Score: {score.final_score:.4f}")
+    print(f"Threshold:   {score.threshold:.4f}")
+    print(f"Bet Triggered: {score.bet_triggered}")
+    
+    print(f"\nRegistry Size: {len(registry)} tools")
+    print("="*60 + "\n")
+
 
 
 def run_pipeline(
@@ -109,13 +138,17 @@ def run_pipeline(
     logger.info("STEP 4: Running deterministic tools and computing score")
     logger.info("=" * 60)
 
-    tool_outputs = run_tools(event, formula, registry)
+    tool_outputs, tool_statuses = run_tools(event, formula, registry)
     score = compute_score(tool_outputs, formula)
 
     logger.info("Score Result:")
     logger.info("  Final Score: %.4f", score.final_score)
     logger.info("  Threshold: %.4f", score.threshold)
     logger.info("  Bet Triggered: %s", score.bet_triggered)
+    
+    # Print run summary for human oversight
+    from config import LIVE_MODE
+    _print_run_summary(event, formula, score, registry, tool_statuses, mode="LIVE" if LIVE_MODE else "REPLAY")
 
     # ── Step 5: Watcher Loop ─────────────────
     watcher_ticks = []
@@ -144,6 +177,47 @@ def run_pipeline(
         score=score,
         watcher_ticks=watcher_ticks,
     )
+
+    # ── Step 7: Evolution (optional) ────────
+    if ENABLE_EVOLUTION:
+        logger.info("=" * 60)
+        logger.info("STEP 7: Running evolution pipeline")
+        logger.info("=" * 60)
+
+        from prediction_agent.evolution.execution_logger import log_execution
+        from agent.graph import build_evolution_graph
+
+        run_result = {
+            "run_id": paper_bet.run_id,
+            "event": event.model_dump(mode="json"),
+            "formula": formula.model_dump(mode="json"),
+            "score": score.model_dump(mode="json"),
+        }
+
+        log_execution(run_result)
+
+        try:
+            evo_graph = build_evolution_graph()
+            evo_result = evo_graph.invoke({
+                "log_path": str(EXECUTION_LOG_FILE),
+                "gap_report": None,
+                "tool_spec": None,
+                "tool_path": None,
+                "verification_result": None,
+                "registry_updated": False,
+                "error": None,
+            })
+
+            if evo_result.get("registry_updated"):
+                logger.info("Evolution: new tool registered for next run.")
+            elif evo_result.get("error"):
+                logger.warning("Evolution error: %s", evo_result["error"])
+            else:
+                logger.info("Evolution: no new tool this cycle.")
+        except Exception as exc:
+            logger.warning("Evolution pipeline failed (non-fatal): %s", exc)
+    else:
+        logger.info("STEP 7: Evolution skipped (ENABLE_EVOLUTION=False)")
 
     logger.info("=" * 60)
     logger.info("PIPELINE COMPLETE")

@@ -19,8 +19,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from prediction_agent.api.kalshi_client import KalshiClient
-from prediction_agent.config import OUTPUTS_DIR
+from api.kalshi_client import KalshiClient
+from config import OUTPUTS_DIR
 
 # Setup Logging
 logging.basicConfig(

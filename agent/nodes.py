@@ -11,9 +11,9 @@ import json
 import logging
 from typing import Any, Dict, List, TypedDict
 
-from prediction_agent.agent.prompts import SYSTEM_PROMPT, build_user_prompt
-from prediction_agent.config import AVAILABLE_TOOLS, LLM_MODEL, LLM_TEMPERATURE
-from prediction_agent.schemas import EventInput, FormulaSpec, ToolSelection
+from agent.prompts import SYSTEM_PROMPT, build_user_prompt
+from config import AVAILABLE_TOOLS, LLM_MODEL, LLM_TEMPERATURE
+from schemas import EventInput, FormulaSpec, ToolSelection
 
 logger = logging.getLogger(__name__)
 

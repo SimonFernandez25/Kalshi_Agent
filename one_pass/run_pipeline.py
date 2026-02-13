@@ -141,7 +141,7 @@ def main():
         logger.warning(f"Failed to save snapshot: {e}")
 
     print("\n>>> Executing Selected Tools...")
-    tool_outputs = run_tools(event, spec, registry)
+    tool_outputs, tool_statuses = run_tools(event, spec, registry)
     for out in tool_outputs:
         print(f"    Result '{out.tool_name}': {out.output_vector}")
 

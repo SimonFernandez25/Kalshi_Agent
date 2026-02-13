@@ -21,8 +21,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from prediction_agent.schemas import EventInput, ToolOutput
-from prediction_agent.tools.base_tool import BaseTool
+from schemas import EventInput, ToolOutput
+from tools.base_tool import BaseTool
 
 logger = logging.getLogger(__name__)
 

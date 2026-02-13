@@ -44,6 +44,15 @@ class ToolOutput(BaseModel):
     metadata: dict = Field(default_factory=dict)
 
 
+class ToolExecutionStatus(BaseModel):
+    """Execution result tracking for tool runner validation."""
+    tool_name: str
+    success: bool
+    latency_ms: float
+    error: Optional[str] = None
+
+
+
 # ──────────────────────────────────────────────
 # Agent Formula Specification
 # ──────────────────────────────────────────────

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from prediction_agent.schemas import EventInput, ToolOutput
+from schemas import EventInput, ToolOutput
 
 
 class BaseTool(ABC):
