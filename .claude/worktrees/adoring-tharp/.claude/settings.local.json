@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git worktree:*)",
+      "Bash(git branch:*)",
+      "Bash(/c/Users/srfer/miniconda3/python.exe -m pytest:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(/c/Users/srfer/miniconda3/python.exe:*)"
+    ]
+  }
+}
