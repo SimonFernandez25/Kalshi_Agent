@@ -278,7 +278,7 @@ def main():
         print()
 
     print("=" * 80)
-    print(f"Dataset saved to SQLite: {store.db_path}")
+    print(f"Dataset saved to SQLite: {store._path}")
     print("=" * 80)
 
 

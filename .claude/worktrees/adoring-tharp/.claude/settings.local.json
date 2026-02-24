@@ -6,7 +6,8 @@
       "Bash(/c/Users/srfer/miniconda3/python.exe -m pytest:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(/c/Users/srfer/miniconda3/python.exe:*)"
+      "Bash(/c/Users/srfer/miniconda3/python.exe:*)",
+      "Bash(python:*)"
     ]
   }
 }
