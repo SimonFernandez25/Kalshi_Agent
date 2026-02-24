@@ -15,9 +15,11 @@ Reads:
 from __future__ import annotations
 
 import base64
+import copy
 import json
 import logging
 import os
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,6 +36,115 @@ from config import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ──────────────────────────────────────────────
+# Parlay / Combinatorial Leg Parsing
+# ──────────────────────────────────────────────
+# These are pure deterministic text transforms
+# applied at the data-ingestion layer so every
+# market dict already carries decomposed legs.
+
+# Spread: "Oklahoma City wins by over 8.5 Points"
+_SPREAD_RE = re.compile(
+    r"^(.+?)\s+wins\s+by\s+over\s+([\d.]+)\s+Points?$",
+    re.IGNORECASE,
+)
+
+# Total: "Over 203.5 points scored"
+_TOTAL_RE = re.compile(
+    r"^Over\s+([\d.]+)\s+points?\s+scored$",
+    re.IGNORECASE,
+)
+
+_MAX_LEGS = 30
+
+
+def _parse_single_leg(raw_leg: str) -> Dict[str, Any]:
+    """
+    Parse one comma-separated segment into a structured leg dict.
+
+    Returns dict with keys: team, type, direction, line.
+    """
+    leg = raw_leg.strip()
+
+    # Determine direction from prefix
+    direction = "yes"
+    leg_lower = leg.lower()
+    if leg_lower.startswith("yes "):
+        direction = "yes"
+        leg = leg[4:].strip()
+    elif leg_lower.startswith("no "):
+        direction = "no"
+        leg = leg[3:].strip()
+
+    # Spread: "Team wins by over X.X Points"
+    spread_match = _SPREAD_RE.match(leg)
+    if spread_match:
+        return {
+            "team": spread_match.group(1).strip(),
+            "type": "spread",
+            "direction": direction,
+            "line": float(spread_match.group(2)),
+        }
+
+    # Total: "Over X.X points scored"
+    total_match = _TOTAL_RE.match(leg)
+    if total_match:
+        return {
+            "team": None,
+            "type": "total",
+            "direction": "under" if direction == "no" else "over",
+            "line": float(total_match.group(1)),
+        }
+
+    # Default: moneyline
+    return {
+        "team": leg if leg else None,
+        "type": "moneyline",
+        "direction": direction,
+        "line": None,
+    }
+
+
+def decompose_title(title: str) -> Dict[str, Any]:
+    """
+    Decompose a Kalshi market title into structured legs.
+
+    Single-outcome titles (e.g. "Lakers vs Celtics: Lakers Win") produce
+    a single moneyline leg.  Multi-leg parlays separated by commas produce
+    one entry per segment.
+
+    Returns dict with: legs, leg_count, is_parlay, contains_spread,
+    contains_total, contains_moneyline.
+    """
+    if not title or not title.strip():
+        return {
+            "legs": [],
+            "leg_count": 0,
+            "is_parlay": False,
+            "contains_spread": False,
+            "contains_total": False,
+            "contains_moneyline": False,
+        }
+
+    raw_segments = [seg.strip() for seg in title.split(",") if seg.strip()]
+    raw_segments = raw_segments[:_MAX_LEGS]
+
+    legs: List[Dict[str, Any]] = []
+    for seg in raw_segments:
+        legs.append(_parse_single_leg(seg))
+
+    leg_types = {leg["type"] for leg in legs}
+
+    return {
+        "legs": legs,
+        "leg_count": len(legs),
+        "is_parlay": len(legs) > 1,
+        "contains_spread": "spread" in leg_types,
+        "contains_total": "total" in leg_types,
+        "contains_moneyline": "moneyline" in leg_types,
+    }
 
 
 # ──────────────────────────────────────────────
@@ -172,9 +283,16 @@ class KalshiClient:
         Returns normalized list of snapshots.
         Falls back to STUBS on error.
         """
+        return self._get_active_markets_impl(limit, status)
+
+    def get_markets(self, limit: int = 100, status: str = "open") -> List[Dict[str, Any]]:
+        """Deprecated alias for get_active_markets."""
+        return self.get_active_markets(limit=limit, status=status)
+
+    def _get_active_markets_impl(self, limit: int = 100, status: str = "open") -> List[Dict[str, Any]]:
         if not self.access_key_id or not self.private_key:
             logger.info("Auth missing — returning stubs.")
-            return STUB_MARKETS[:limit]
+            return copy.deepcopy(STUB_MARKETS[:limit])
 
         all_markets = []
         cursor = None
@@ -247,7 +365,7 @@ class KalshiClient:
 
         except Exception as exc:
             logger.warning("API call failed: %s — returning stubs.", exc)
-            return STUB_MARKETS[:limit]
+            return copy.deepcopy(STUB_MARKETS[:limit])
 
     def get_market_snapshot(self, market_id: str) -> Dict[str, Any]:
         """Fetch single market snapshot. Fallback to stub."""
@@ -273,15 +391,15 @@ class KalshiClient:
             except:
                 pass
 
-        return {
+        title = m.get("title", "")
+        leg_info = decompose_title(title)
+
+        normalized = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "market_id": m.get("ticker", ""),
-            "title": m.get("title", ""),
+            "title": title,
             "status": m.get("status", "unknown"),
-            "yes_bid": m.get("yes_bid", 0.0), # price in cents? API often returns cents.
-            # If API returns 50 for 50 cents, we should normalize to 0.50?
-            # Warning: Kalshi V2 usually assumes cents (1-99).
-            # We will normalize / 100 if > 1.
+            "yes_bid": self._norm_price(m.get("yes_bid", 0)),
             "yes_ask": self._norm_price(m.get("yes_ask", 0)),
             "last_price": self._norm_price(m.get("last_price", 0)),
             "volume": m.get("volume", 0),
@@ -291,9 +409,15 @@ class KalshiClient:
             "time_to_close_sec": time_to_close,
             "series_ticker": m.get("series_ticker", ""),
             "category": m.get("category", "Uncategorized"),
-            # Normalized bid
-            "yes_bid": self._norm_price(m.get("yes_bid", 0)),
+            # ── Parlay decomposition ──
+            "legs": leg_info["legs"],
+            "leg_count": leg_info["leg_count"],
+            "is_parlay": leg_info["is_parlay"],
+            "contains_spread": leg_info["contains_spread"],
+            "contains_total": leg_info["contains_total"],
+            "contains_moneyline": leg_info["contains_moneyline"],
         }
+        return normalized
 
     def _norm_price(self, p: Any) -> float:
         """Normalize price to 0.0-1.0 range."""

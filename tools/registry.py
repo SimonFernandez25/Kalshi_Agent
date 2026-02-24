@@ -161,13 +161,38 @@ def build_default_registry() -> ToolRegistry:
     from tools.price_jump_detector_tool import PriceJumpDetectorTool
     from tools.liquidity_spike_tool import LiquiditySpikeTool
 
+    # External fundamentals layer (Layer B)
+    from prediction_agent.tools.external.fred_macro_tool import FredMacroTool
+    from prediction_agent.tools.external.bls_labor_tool import BlsLaborTool
+    from prediction_agent.tools.external.weather_probability_tool import WeatherProbabilityTool
+    from prediction_agent.tools.external.sportsbook_implied_probability_tool import (
+        SportsbookImpliedProbabilityTool,
+    )
+
+    # Respect ENABLE_MOCK_TOOLS flag — off by default in production
+    try:
+        from config import ENABLE_MOCK_TOOLS
+    except ImportError:
+        ENABLE_MOCK_TOOLS = True
+
     registry = ToolRegistry()
+
+    # ── Layer A: Market structure (original) ──────────────────────────────────
+    # mock_price_signal is kept — it carries real price information
     registry.register(MockPriceSignal())
-    registry.register(MockRandomContext())
+    # mock_random_context is pure noise — only register when mocks enabled
+    if ENABLE_MOCK_TOOLS:
+        registry.register(MockRandomContext())
     registry.register(SnapshotVolatilityTool())
     registry.register(SpreadCompressionTool())
     registry.register(PriceJumpDetectorTool())
     registry.register(LiquiditySpikeTool())
+
+    # ── Layer B: External fundamentals ────────────────────────────────────────
+    registry.register(FredMacroTool())
+    registry.register(BlsLaborTool())
+    registry.register(WeatherProbabilityTool())
+    registry.register(SportsbookImpliedProbabilityTool())
 
     # Load approved generated tools (if any)
     registry.load_approved_generated_tools()

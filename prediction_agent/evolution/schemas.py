@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -70,7 +70,12 @@ class RiskLevel(str, Enum):
 
 
 class ToolSpec(BaseModel):
-    """LLM-generated specification for a new tool."""
+    """
+    LLM-generated specification for a new tool.
+
+    Provenance fields track which gap and run evidence caused this tool to be
+    proposed, so the full lineage can be reconstructed later.
+    """
 
     tool_name: str = Field(..., min_length=1)
     description: str = Field(..., min_length=1)
@@ -81,6 +86,12 @@ class ToolSpec(BaseModel):
     expected_token_reduction: float = Field(0.0, ge=0.0)
     expected_accuracy_gain: float = Field(0.0, ge=0.0)
     risk_level: RiskLevel = RiskLevel.LOW
+    # ── provenance back-links ──────────────────────────────────────────────────
+    namespace: str = "evolved/v1"
+    capability_tag: Optional[str] = None
+    parent_tool_id: Optional[str] = None
+    trigger_gap_id: Optional[str] = None
+    trigger_run_ids: List[str] = Field(default_factory=list)
 
     @field_validator("deterministic")
     @classmethod
@@ -121,10 +132,33 @@ class ToolStatus(str, Enum):
 
 
 class ToolLifecycleRecord(BaseModel):
-    """Per-tool performance tracking over time."""
+    """
+    Per-tool performance tracking over time.
+
+    Provenance fields (added for full lineage tracking):
+      - namespace:              e.g. "built-in", "evolved/v1", "evolved/v2"
+      - version:                integer version counter (monotonically increasing)
+      - parent_tool_id:         name of the tool this was mutated from (if any)
+      - trigger_gap_id:         identifier of the GapReport that caused generation
+      - trigger_run_ids:        run_id values whose execution logs triggered the gap
+      - capability_tag:         semantic category (e.g. "volatility", "liquidity")
+      - backtest_delta_score:   improvement in Brier score vs. baseline from backtest
+      - correlation_checked:    True if correlation pruning was run before approval
+      - verification_checks:    Dict of phase→passed from tool_verifier
+    """
 
     tool_name: str
-    version: str = "0.1.0"
+    # ── provenance fields ──────────────────────────────────────────────────────
+    namespace: str = "built-in"
+    version: int = 1
+    parent_tool_id: Optional[str] = None
+    trigger_gap_id: Optional[str] = None
+    trigger_run_ids: List[str] = Field(default_factory=list)
+    capability_tag: Optional[str] = None
+    backtest_delta_score: Optional[float] = None
+    correlation_checked: bool = False
+    verification_checks: Dict[str, Any] = Field(default_factory=dict)
+    # ── performance tracking ───────────────────────────────────────────────────
     usage_count: int = 0
     total_score_contribution: float = 0.0
     correct_predictions: int = 0
@@ -154,3 +188,19 @@ class ToolLifecycleRecord(BaseModel):
         if self.usage_count == 0:
             return 0.0
         return self.total_latency_ms / self.usage_count
+
+    def lineage_summary(self) -> Dict[str, Any]:
+        """Return a compact provenance dict for logging and display."""
+        return {
+            "tool_name": self.tool_name,
+            "namespace": self.namespace,
+            "version": self.version,
+            "parent_tool_id": self.parent_tool_id,
+            "trigger_gap_id": self.trigger_gap_id,
+            "trigger_run_ids": self.trigger_run_ids,
+            "capability_tag": self.capability_tag,
+            "backtest_delta_score": self.backtest_delta_score,
+            "correlation_checked": self.correlation_checked,
+            "verification_checks": self.verification_checks,
+            "created_at": self.created_at.isoformat(),
+        }

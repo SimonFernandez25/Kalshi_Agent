@@ -100,6 +100,11 @@ class ScoreResult(BaseModel):
     weights: List[float]
     threshold: float
     bet_triggered: bool
+    # probability_edge mode fields (None in signal_sum mode)
+    scoring_mode: str = "signal_sum"
+    model_probability: Optional[float] = None   # calibrated probability (post-sigmoid)
+    edge: Optional[float] = None                # model_probability - market_price
+    raw_score_z: Optional[float] = None         # pre-calibration weighted sum (z-space)
 
 
 # ──────────────────────────────────────────────

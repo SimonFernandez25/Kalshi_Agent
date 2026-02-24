@@ -38,8 +38,8 @@ class TestASTInspection:
 
     def test_safe_tool_passes(self, tmp_path: Path):
         code = dedent('''\
-            from prediction_agent.tools.base_tool import BaseTool
-            from prediction_agent.schemas import EventInput, ToolOutput
+            from tools.base_tool import BaseTool
+            from schemas import EventInput, ToolOutput
 
             class SafeTool(BaseTool):
                 @property
@@ -69,8 +69,8 @@ class TestASTInspection:
     def test_blocks_os_import(self, tmp_path: Path):
         code = dedent('''\
             import os
-            from prediction_agent.tools.base_tool import BaseTool
-            from prediction_agent.schemas import EventInput, ToolOutput
+            from tools.base_tool import BaseTool
+            from schemas import EventInput, ToolOutput
 
             class BadTool(BaseTool):
                 @property
@@ -90,8 +90,8 @@ class TestASTInspection:
     def test_blocks_subprocess_import(self, tmp_path: Path):
         code = dedent('''\
             import subprocess
-            from prediction_agent.tools.base_tool import BaseTool
-            from prediction_agent.schemas import EventInput, ToolOutput
+            from tools.base_tool import BaseTool
+            from schemas import EventInput, ToolOutput
 
             class BadTool(BaseTool):
                 @property
@@ -111,8 +111,8 @@ class TestASTInspection:
     def test_blocks_random_import(self, tmp_path: Path):
         code = dedent('''\
             import random
-            from prediction_agent.tools.base_tool import BaseTool
-            from prediction_agent.schemas import EventInput, ToolOutput
+            from tools.base_tool import BaseTool
+            from schemas import EventInput, ToolOutput
 
             class BadTool(BaseTool):
                 @property
@@ -131,8 +131,8 @@ class TestASTInspection:
 
     def test_blocks_eval_call(self, tmp_path: Path):
         code = dedent('''\
-            from prediction_agent.tools.base_tool import BaseTool
-            from prediction_agent.schemas import EventInput, ToolOutput
+            from tools.base_tool import BaseTool
+            from schemas import EventInput, ToolOutput
 
             class BadTool(BaseTool):
                 @property
@@ -155,8 +155,8 @@ class TestRuntimeSandbox:
 
     def test_catches_non_tool_output(self, tmp_path: Path):
         code = dedent('''\
-            from prediction_agent.tools.base_tool import BaseTool
-            from prediction_agent.schemas import EventInput, ToolOutput
+            from tools.base_tool import BaseTool
+            from schemas import EventInput, ToolOutput
 
             class BadReturnTool(BaseTool):
                 @property
@@ -176,8 +176,8 @@ class TestRuntimeSandbox:
 
     def test_catches_empty_output_vector(self, tmp_path: Path):
         code = dedent('''\
-            from prediction_agent.tools.base_tool import BaseTool
-            from prediction_agent.schemas import EventInput, ToolOutput
+            from tools.base_tool import BaseTool
+            from schemas import EventInput, ToolOutput
 
             class EmptyVecTool(BaseTool):
                 @property
@@ -199,8 +199,8 @@ class TestDeterminism:
 
     def test_deterministic_tool_passes(self, tmp_path: Path):
         code = dedent('''\
-            from prediction_agent.tools.base_tool import BaseTool
-            from prediction_agent.schemas import EventInput, ToolOutput
+            from tools.base_tool import BaseTool
+            from schemas import EventInput, ToolOutput
 
             class DetTool(BaseTool):
                 @property

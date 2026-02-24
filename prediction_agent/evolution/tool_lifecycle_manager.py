@@ -11,7 +11,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from config import EVOLUTION_DEPRECATION_RUNS, TOOL_LIFECYCLE_FILE
 from prediction_agent.evolution.schemas import ToolLifecycleRecord, ToolStatus
@@ -35,6 +35,78 @@ class ToolLifecycleManager:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def register_tool_with_provenance(
+        self,
+        tool_name: str,
+        namespace: str = "built-in",
+        version: int = 1,
+        parent_tool_id: Optional[str] = None,
+        trigger_gap_id: Optional[str] = None,
+        trigger_run_ids: Optional[List[str]] = None,
+        capability_tag: Optional[str] = None,
+        backtest_delta_score: Optional[float] = None,
+        correlation_checked: bool = False,
+        verification_checks: Optional[Dict[str, bool]] = None,
+    ) -> ToolLifecycleRecord:
+        """
+        Create or update a tool's lifecycle record with full provenance metadata.
+
+        Call this when a new tool is registered (either built-in or evolved).
+        Idempotent — updates the record if it already exists.
+
+        Returns the ToolLifecycleRecord.
+        """
+        record = self._records.get(tool_name)
+        if record is None:
+            record = ToolLifecycleRecord(
+                tool_name=tool_name,
+                namespace=namespace,
+                version=version,
+                parent_tool_id=parent_tool_id,
+                trigger_gap_id=trigger_gap_id,
+                trigger_run_ids=trigger_run_ids or [],
+                capability_tag=capability_tag,
+                backtest_delta_score=backtest_delta_score,
+                correlation_checked=correlation_checked,
+                verification_checks=verification_checks or {},
+            )
+            self._records[tool_name] = record
+        else:
+            # Update provenance fields on existing record
+            record.namespace          = namespace
+            if version > record.version:
+                record.version        = version
+            if parent_tool_id:
+                record.parent_tool_id = parent_tool_id
+            if trigger_gap_id:
+                record.trigger_gap_id = trigger_gap_id
+            if trigger_run_ids:
+                record.trigger_run_ids = trigger_run_ids
+            if capability_tag:
+                record.capability_tag = capability_tag
+            if backtest_delta_score is not None:
+                record.backtest_delta_score = backtest_delta_score
+            record.correlation_checked = correlation_checked
+            if verification_checks:
+                record.verification_checks = verification_checks
+
+        self._save()
+
+        # Mirror to SQLite if enabled
+        try:
+            from config import SQLITE_ENABLED
+            if SQLITE_ENABLED:
+                from prediction_agent.storage.sqlite_store import SQLiteStore
+                SQLiteStore().upsert_tool_lineage(record)
+        except Exception as exc:
+            logger.debug("SQLite upsert for tool '%s' skipped: %s", tool_name, exc)
+
+        logger.info(
+            "Registered tool provenance: %s (namespace=%s, version=%d)",
+            tool_name, namespace, version,
+        )
+        return record
 
     def record_usage(
         self,
