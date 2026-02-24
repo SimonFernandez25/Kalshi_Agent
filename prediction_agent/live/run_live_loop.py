@@ -300,6 +300,21 @@ def _process_market(
         logger.debug("Could not build EventInput for market %s: %s", market.get("market_id"), exc)
         return None
 
+    # Market sanity check (abstain on zero/near-zero prices)
+    try:
+        from config import ABSTAIN_ON_ZERO_PRICE, MIN_VALID_PRICE
+    except ImportError:
+        ABSTAIN_ON_ZERO_PRICE = True
+        MIN_VALID_PRICE = 0.01
+
+    if ABSTAIN_ON_ZERO_PRICE:
+        if price <= MIN_VALID_PRICE:
+            logger.debug("Abstaining on %s: price=%.4f <= MIN_VALID_PRICE", market_id, price)
+            return None
+        if price >= 1.0 - MIN_VALID_PRICE:
+            logger.debug("Abstaining on %s: price=%.4f >= %.4f (resolved)", market_id, price, 1.0 - MIN_VALID_PRICE)
+            return None
+
     # Run deterministic engine
     try:
         tool_outputs, tool_statuses = run_tools(event, formula, registry)
