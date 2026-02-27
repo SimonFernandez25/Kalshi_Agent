@@ -2,17 +2,33 @@
 
 ## Summary
 
-Created two dataset build scripts to process 25 markets and identify failure modes:
+Created three dataset build scripts to process markets and identify failure modes:
 
 1. **`scripts/build_initial_dataset.py`** - Full pipeline with historical snapshot tools
 2. **`scripts/build_initial_dataset_external.py`** - External tools only (no snapshot dependency)
+3. **`scripts/build_dataset_from_historical.py`** - ✅ **Uses Kalshi Historical API** (settled markets with outcomes)
 
-## Current Blocker
+## Latest Update: Historical API Working! 🎉
 
-**All Kalshi API markets have price=0.000** (illiquid/stub markets)
-- Fetched 100 markets with `status="open"`, all have `last_price=0.000`
-- System correctly abstains on these (price <= MIN_VALID_PRICE=0.01)
-- Cannot generate meaningful signals without liquid markets
+**Successfully implemented Kalshi Historical API support:**
+- Added `get_historical_cutoff()` and `get_historical_markets()` to `KalshiClient`
+- Fetched 50 settled markets from July 2024 with known outcomes
+- System correctly processed 11/50 markets (39 abstained on price filters)
+- Historical cutoff timestamp: `2024-07-10T00:00:00Z`
+
+## Current Status
+
+**What's Working ✓**
+- Kalshi Historical API integration functional
+- Market fetching, processing, and SQLite logging all work
+- Sanity checks correctly filter 39/50 markets (price=0 or price>=0.99)
+- Known outcomes available (`result='yes'` or `result='no'`)
+
+**Current Limitation ⚠️**
+- **All tools return zeros** (no data collected yet):
+  - External tools need FRED/BLS/Weather/Odds data
+  - Historical tools need market snapshot data
+  - 0 bets triggered out of 11 processed markets
 
 ## Findings
 
@@ -38,73 +54,87 @@ Created two dataset build scripts to process 25 markets and identify failure mod
   - API returns `result='unknown'` for all markets
   - Cannot validate predictions against known outcomes yet
 
-## Next Steps
+## Critical Next Step: Collect External Data
 
-### Immediate (Required before dataset build)
+**You must collect external data before the system can generate meaningful signals.**
 
-1. **Run live loop to collect snapshot data**
-   ```bash
-   # From notebook `00_live_loop.ipynb` Section 4
-   # Or from CLI:
-   python -m prediction_agent.live.run_live_loop --poll-interval 300 --max-markets 100
-   ```
-   - Run for several hours/days to build up price history
-   - Creates snapshots in `outputs/market_snapshots.jsonl`
-   - Enables historical tools to produce meaningful signals
+### Step 1: Collect External Data (REQUIRED)
 
-2. **Collect external data**
-   ```python
-   # From notebook `00_live_loop.ipynb` Section 3
-   from prediction_agent.collector.external.fred_collector import collect_fred_data
-   from prediction_agent.collector.external.bls_collector import collect_bls_data
-   from prediction_agent.collector.external.weather_collector import collect_weather_data
-   from prediction_agent.collector.external.odds_collector import collect_odds_data
+Open `notebooks/00_live_loop.ipynb` and run **Section 3** to populate external data:
 
-   collect_fred_data()    # Macro indicators (GDP, inflation, etc.)
-   collect_bls_data()     # Labor/CPI data
-   collect_weather_data() # NBA arena city forecasts
-   collect_odds_data()    # Sportsbook lines (NBA/NFL)
-   ```
-   - Populates `external/*.jsonl` files
-   - Enables external tools to provide signals
+```python
+# Section 3: External Data Collection
+from prediction_agent.collector.external.fred_collector import collect_fred_data
+from prediction_agent.collector.external.bls_collector import collect_bls_data
+from prediction_agent.collector.external.weather_collector import collect_weather_data
+from prediction_agent.collector.external.odds_collector import collect_odds_data
 
-3. **Wait for liquid Kalshi markets**
-   - Current API returns only price=0.000 markets
-   - Check periodically for markets with `last_price > 0.01`
-   - Or use historical/closed markets if API provides them
+# Run all collectors
+collect_fred_data()    # Macro indicators (GDP, inflation, unemployment)
+collect_bls_data()     # Labor statistics and CPI
+collect_weather_data() # NBA arena city forecasts
+collect_odds_data()    # Sportsbook lines for NBA/NFL
+```
 
-### After Data Collection
+**Expected output:**
+- `external/fred_snapshots.jsonl` - FRED economic indicators
+- `external/bls_snapshots.jsonl` - BLS labor/CPI data
+- `external/weather_snapshots.jsonl` - Weather forecasts for NBA cities
+- `external/odds_snapshots.jsonl` - Sportsbook implied probabilities
 
-4. **Re-run dataset build scripts**
-   ```bash
-   # Option A: Full pipeline (requires snapshot history)
-   python scripts/build_initial_dataset.py
+This takes ~2-5 minutes to collect fresh data from all APIs.
 
-   # Option B: External tools only
-   python scripts/build_initial_dataset_external.py
-   ```
+### Step 2: Re-run Historical Dataset Build
 
-5. **Analyze results from SQLite**
-   ```python
-   from prediction_agent.storage.sqlite_store import SQLiteStore
-   store = SQLiteStore()
+Once external data is collected, run:
 
-   # Query runs
-   runs = store.query("SELECT * FROM runs WHERE bet_triggered=1")
+```bash
+python scripts/build_dataset_from_historical.py
+```
 
-   # Query tool performance
-   tools = store.query("""
-       SELECT tool_id, AVG(contribution) as avg_contrib, COUNT(*) as n_runs
-       FROM tool_outputs
-       GROUP BY tool_id
-       ORDER BY avg_contrib DESC
-   """)
-   ```
+**Expected results:**
+- Tools will return non-zero signals (using external data)
+- Some markets will trigger bets (threshold=0.30)
+- Can evaluate prediction accuracy against known outcomes
 
-6. **Backtest evaluation**
-   - Use `notebooks/03_backtest_eval.ipynb` to evaluate performance
-   - Compare predicted bets vs actual outcomes (when available)
-   - Calculate Brier score, calibration, profit/loss
+### Step 3: Analyze Performance
+
+```python
+from prediction_agent.storage.sqlite_store import SQLiteStore
+store = SQLiteStore()
+
+# Check tool contributions
+tools = store.query("""
+    SELECT tool_id,
+           AVG(contribution) as avg_contrib,
+           COUNT(*) as n_runs
+    FROM tool_outputs
+    GROUP BY tool_id
+    ORDER BY avg_contrib DESC
+""")
+
+# Check bet accuracy
+bets = store.query("""
+    SELECT
+        COUNT(*) as total_bets,
+        SUM(CASE WHEN (final_score > 0 AND outcome = 1.0) OR
+                      (final_score < 0 AND outcome = 0.0)
+                 THEN 1 ELSE 0 END) as correct_bets
+    FROM runs
+    WHERE bet_triggered = 1 AND outcome IS NOT NULL
+""")
+```
+
+### Optional: Collect Live Snapshot Data
+
+For historical tools (snapshot_volatility, spread_compression, price_jump_detector):
+
+```bash
+# Run live loop for several hours to build price history
+python -m prediction_agent.live.run_live_loop --poll-interval 300 --max-markets 100
+```
+
+This populates `outputs/market_snapshots.jsonl` with real Kalshi price data over time.
 
 ## Configuration
 
@@ -119,20 +149,27 @@ These can be adjusted in the script configuration section.
 ## File Locations
 
 ### Scripts
-- `scripts/build_initial_dataset.py` - Full pipeline with all tools
+- `scripts/build_dataset_from_historical.py` - ✅ **RECOMMENDED** Uses Kalshi Historical API
+- `scripts/build_initial_dataset.py` - Full pipeline with all tools (needs snapshot data)
 - `scripts/build_initial_dataset_external.py` - External tools only
 
-### Data
-- `outputs/market_snapshots.jsonl` - Historical Kalshi price data (STUB data only currently)
+### Data Files
 - `outputs/prediction_agent.db` - SQLite database with runs and tool outputs
-- `external/fred_snapshots.jsonl` - FRED macro data
-- `external/bls_snapshots.jsonl` - BLS labor/CPI data
-- `external/weather_snapshots.jsonl` - Weather forecasts
-- `external/odds_snapshots.jsonl` - Sportsbook odds
+- `outputs/market_snapshots.jsonl` - Kalshi price history (612 STUB entries currently)
+- `external/fred_snapshots.jsonl` - ⚠️ **MISSING** - FRED macro data
+- `external/bls_snapshots.jsonl` - ⚠️ **MISSING** - BLS labor/CPI data
+- `external/weather_snapshots.jsonl` - ⚠️ **MISSING** - Weather forecasts
+- `external/odds_snapshots.jsonl` - ⚠️ **MISSING** - Sportsbook odds
 
 ### Notebooks
-- `notebooks/00_live_loop.ipynb` - Live data collection control panel
+- `notebooks/00_live_loop.ipynb` - **Section 3: Run this first to collect external data**
 - `notebooks/03_backtest_eval.ipynb` - Backtest analysis
+
+### API Clients
+- `api/kalshi_client.py` - Kalshi API client with historical data support
+  - `get_historical_cutoff()` - Get current historical data cutoff timestamps
+  - `get_historical_markets()` - Fetch settled markets with known outcomes
+  - Working as of 2026-02-27 (cutoff: 2024-07-10)
 
 ## Known Issues
 
@@ -153,22 +190,38 @@ These can be adjusted in the script configuration section.
 ## Success Criteria
 
 Dataset build will be successful when:
-- [ ] Live loop has collected 1000+ market snapshots over 24+ hours
-- [ ] External data collectors have recent (<1 hour old) data
-- [ ] Kalshi API returns markets with price > 0.01
-- [ ] At least 10/25 markets trigger bets (with threshold=0.30)
-- [ ] SQLite contains runs with non-zero tool outputs
-- [ ] At least 2 different domains represented (sports, economics, etc.)
+- [x] Kalshi Historical API integration working
+- [x] Fetches settled markets with known outcomes
+- [x] SQLite logging functional
+- [x] Market sanity checks filter correctly
+- [ ] **External data collected** ← **YOU ARE HERE**
+- [ ] At least 5/50 historical markets trigger bets
+- [ ] Tool outputs are non-zero (using external data)
+- [ ] Prediction accuracy > 50% (better than random)
 
 ## Git Status
 
 Latest commits:
 ```bash
+4a5677c Add Kalshi Historical API support and build_dataset_from_historical.py
+7d71f52 Add DATASET_BUILD_STATUS.md documenting current state and blockers
 b4fbed9 Add build_initial_dataset_external.py for external tools only
 d53716b Fix SQLiteStore._path attribute reference in build_initial_dataset
 b4e0b8d Fix SQLiteStore.insert_run() call in build_initial_dataset.py
-31673fe Add abstain check to live loop _process_market
-d236b55 Update live loop notebook with domain-aware pipeline and external data collection
 ```
 
 Branch: `main` (consolidated, adoring-tharp branch merged and deleted)
+
+---
+
+## Quick Start Guide
+
+**To build your first dataset with known outcomes:**
+
+1. Open `notebooks/00_live_loop.ipynb`
+2. Run **Section 3** to collect external data (~5 minutes)
+3. Run: `python scripts/build_dataset_from_historical.py`
+4. Check results in `outputs/prediction_agent.db`
+5. Analyze: `SELECT * FROM runs WHERE bet_triggered=1`
+
+That's it! The historical markets have known outcomes so you can immediately see accuracy.
