@@ -133,10 +133,31 @@ class SQLiteStore:
                     trigger_run_ids      TEXT  -- JSON array stored as TEXT
                 );
 
+                CREATE TABLE IF NOT EXISTS historical_tool_evaluation (
+                    eval_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id        TEXT NOT NULL,
+                    market_id     TEXT NOT NULL,
+                    domain        TEXT,
+                    p_model       REAL,
+                    p_market      REAL,
+                    edge          REAL,
+                    decision      TEXT,
+                    outcome       REAL,
+                    raw_score_z   REAL,
+                    tool_name     TEXT NOT NULL,
+                    tool_signal_mean REAL,
+                    weight        REAL,
+                    z_contribution REAL,
+                    market_timestamp TEXT
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_runs_market ON runs(market_id);
                 CREATE INDEX IF NOT EXISTS idx_runs_bet ON runs(bet_triggered);
                 CREATE INDEX IF NOT EXISTS idx_tool_outputs_run ON tool_outputs(run_id);
                 CREATE INDEX IF NOT EXISTS idx_tool_outputs_tool ON tool_outputs(tool_id);
+                CREATE INDEX IF NOT EXISTS idx_eval_market ON historical_tool_evaluation(market_id);
+                CREATE INDEX IF NOT EXISTS idx_eval_tool ON historical_tool_evaluation(tool_name);
+                CREATE INDEX IF NOT EXISTS idx_eval_run ON historical_tool_evaluation(run_id);
             """)
 
     # ── Run insertion ──────────────────────────────────────────────────────────
@@ -321,6 +342,55 @@ class SQLiteStore:
             (tool_id,),
         )
         return rows[0] if rows else {}
+
+    def insert_evaluation(
+        self,
+        run_id: str,
+        market_id: str,
+        domain: str,
+        p_model: Optional[float],
+        p_market: float,
+        edge: Optional[float],
+        decision: str,
+        outcome: float,
+        raw_score_z: Optional[float],
+        tool_name: str,
+        tool_signal_mean: float,
+        weight: float,
+        z_contribution: float,
+        market_timestamp: str,
+    ) -> None:
+        """
+        Insert a single evaluation record into historical_tool_evaluation table.
+
+        This is called once per tool per market during evaluation runs.
+        """
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO historical_tool_evaluation
+                    (run_id, market_id, domain, p_model, p_market, edge, decision,
+                     outcome, raw_score_z, tool_name, tool_signal_mean, weight,
+                     z_contribution, market_timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    run_id,
+                    market_id,
+                    domain,
+                    p_model,
+                    p_market,
+                    edge,
+                    decision,
+                    outcome,
+                    raw_score_z,
+                    tool_name,
+                    tool_signal_mean,
+                    weight,
+                    z_contribution,
+                    market_timestamp,
+                ),
+            )
 
     # ── Connection factory ─────────────────────────────────────────────────────
 
