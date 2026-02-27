@@ -374,6 +374,122 @@ class KalshiClient:
         # This is a helper if needed.
         return STUB_MARKETS[0] # Placeholder if not strictly used by collector
 
+    def get_historical_cutoff(self) -> Dict[str, Any]:
+        """
+        Fetch the current historical data cutoff timestamps.
+
+        Returns dict with keys:
+        - market_settled_ts: Markets settled before this are historical only
+        - trades_created_ts: Trades before this are historical only
+        - orders_updated_ts: Orders updated before this are historical only
+
+        See: https://docs.kalshi.com/historical-data
+        """
+        if not self.access_key_id or not self.private_key:
+            logger.warning("Auth missing — cannot fetch historical cutoff")
+            return {}
+
+        path = "/historical/cutoff"
+        headers = self._get_headers("GET", path)
+
+        try:
+            response = self.session.get(
+                f"{self.base_url}{path}",
+                headers=headers,
+                timeout=10
+            )
+            response.raise_for_status()
+            data = response.json()
+            logger.info("Fetched historical cutoff timestamps")
+            return data
+        except Exception as e:
+            logger.error(f"Failed to fetch historical cutoff: {e}")
+            return {}
+
+    def get_historical_markets(
+        self,
+        limit: int = 100,
+        status: str = "settled",
+        min_close_ts: Optional[str] = None,
+        max_close_ts: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch historical (settled) markets older than the cutoff.
+
+        Args:
+            limit: Max markets to fetch (will paginate)
+            status: Market status filter (default: "settled")
+            min_close_ts: ISO timestamp - only markets that closed after this
+            max_close_ts: ISO timestamp - only markets that closed before this
+
+        Returns:
+            List of normalized market dicts with known outcomes
+
+        See: https://docs.kalshi.com/historical-data
+        """
+        if not self.access_key_id or not self.private_key:
+            logger.info("Auth missing — returning empty list for historical markets")
+            return []
+
+        all_markets = []
+        cursor = None
+        page_count = 0
+        max_pages = 10
+
+        try:
+            while len(all_markets) < limit and page_count < max_pages:
+                path = "/historical/markets"
+
+                # Build query params
+                params = {
+                    "limit": min(100, limit - len(all_markets)),
+                    "status": status,
+                }
+                if cursor:
+                    params["cursor"] = cursor
+                if min_close_ts:
+                    params["min_close_ts"] = min_close_ts
+                if max_close_ts:
+                    params["max_close_ts"] = max_close_ts
+
+                # Sign request with query params
+                path_with_query = path + "?" + "&".join(f"{k}={v}" for k, v in params.items())
+                headers = self._get_headers("GET", path_with_query)
+
+                response = self.session.get(
+                    f"{self.base_url}{path}",
+                    params=params,
+                    headers=headers,
+                    timeout=30
+                )
+                response.raise_for_status()
+                data = response.json()
+
+                markets = data.get("markets", [])
+                if not markets:
+                    break
+
+                # Normalize and add to results
+                for m in markets:
+                    normalized = self._normalize_market(m)
+                    # Add result field for historical markets
+                    normalized["result"] = m.get("result", "unknown")
+                    all_markets.append(normalized)
+
+                # Check for next page
+                cursor = data.get("cursor")
+                if not cursor:
+                    break
+
+                page_count += 1
+
+            logger.info(f"Fetched {len(all_markets)} historical markets.")
+            return all_markets[:limit]
+
+        except Exception as e:
+            logger.error(f"Failed to fetch historical markets: {e}")
+            return []
+
     def _normalize_market(self, m: Dict[str, Any]) -> Dict[str, Any]:
         """Convert raw API dict to flat schema."""
         # Safely extract fields
